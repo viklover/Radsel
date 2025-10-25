@@ -31,7 +31,13 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     ///     Constructor of client with using "https://ccu.su" as source by default
     /// </summary>
     /// <param name="credentials">Credentials to CCU api</param>
-    public RadselClient(RadselCredentials credentials) : this(RadselCCURelayUri, credentials) {}
+    public RadselClient(RadselCredentials credentials) : this(RadselCCURelayUri, credentials) { }
+    /// <summary>
+    ///     Команда к Radsel
+    /// </summary>
+    /// <param name="Query">Путь запроса</param>
+    /// <param name="Json">Содержимое запроса</param>
+    public record RadselCommand(Uri Query, string Json);
     /// <summary>
     ///     Radsel sever sent event (SSE) type
     /// </summary>
@@ -60,8 +66,8 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <returns>Async task to command execution</returns>
     public async Task<RadselState> GetStateAndEventsAsync(CancellationToken cancellationToken) {
         var query = BuildCommandQuery("GetStateAndEvents");
-        using var request = new HttpRequestMessage(HttpMethod.Get, query);
-        var responseJson = await ExecuteJsonAsync(request, cancellationToken);
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        await Console.Out.WriteLineAsync(responseJson.ToString(Formatting.Indented));
         var result = ReadState(responseJson);
         return result;
     }
@@ -75,8 +81,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         var query = BuildCommandQuery("AckEvents", new JObject {
             ["IDs"] = new JArray(eventIdCollection.Select(i => i.Id))
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, query);
-        var responseJson = await ExecuteJsonAsync(request, cancellationToken);
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
         var response = ReadResponseStatusOrThrow(responseJson);
         if (response.Code != 0) {
             throw new RadselClientResponseException(response);
@@ -92,8 +97,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         var query = BuildCommandQuery("SetPartitionState", new JObject {
             ["State"] = Serialize(state)
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, query);
-        var responseJson = await ExecuteJsonAsync(request, cancellationToken);
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
         var response = ReadResponseStatus(responseJson);
         if (response != null) {
             throw new RadselClientResponseException(response);
@@ -111,8 +115,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         var query = BuildCommandQuery("SetPartitionState", new JObject {
             ["State"] = new JArray(stateArray.Select(state => state == null ? string.Empty : Serialize(state.Value)))
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, query);
-        var responseJson = await ExecuteJsonAsync(request, cancellationToken);
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
         var response = ReadResponseStatus(responseJson);
         if (response != null) {
             throw new RadselClientResponseException(response);
@@ -133,8 +136,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
             ["Number"] = output,
             ["State"] = state ? 1 : 0
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, query);
-        var responseJson = await ExecuteJsonAsync(request, cancellationToken);
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
         var response = ReadResponseStatus(responseJson);
         if (response != null) {
             throw new RadselClientResponseException(response);
@@ -164,6 +166,19 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
             var response = await SendAsync(request, option, cancellationToken);
             return response;
         }
+    }
+    /// <summary>
+    ///     Send request and parse response in json in async manner
+    /// </summary>
+    /// <param name="command">Command</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to request sending</returns>
+    private async Task<JToken> ExecuteJsonAsync(RadselCommand command, CancellationToken cancellationToken) {
+        using var request = new HttpRequestMessage(HttpMethod.Post, command.Query);
+        using var content = new StringContent(command.Json, MediaTypeHeaderValue.Parse("application/x-www-form-urlencoded"));
+        request.Content = content;
+        var result = await ExecuteJsonAsync(request, cancellationToken);
+        return result;
     }
     /// <summary>
     ///     Send request and parse response in json in async manner
@@ -257,9 +272,9 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// </summary>
     /// <param name="command">Command</param>
     /// <returns>Query</returns>
-    public Uri BuildCommandQuery(string command) {
-        var json = new JObject();
-        return BuildCommandQuery(command, json);
+    public RadselCommand BuildCommandQuery(string command) {
+        var parameters = new JObject();
+        return BuildCommandQuery(command, parameters);
     }
     /// <summary>
     ///     Build command query
@@ -267,14 +282,17 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <param name="command">Command</param>
     /// <param name="parameters">Parameters</param>
     /// <returns>Query</returns>
-    public Uri BuildCommandQuery(string command, JToken parameters) {
-        parameters["Command"] = command;
-        var commandJson = parameters.ToString(Formatting.None);
+    public RadselCommand BuildCommandQuery(string command, JToken parameters) {
+        var commandJson = new JObject {
+            ["Command"] = command
+        };
+        var queryCommand = commandJson.ToString(Formatting.None);
         var commandQuery = new Uri(ccuApi, "data.cgx");
-        var resultQuery = BuildQuery(commandQuery, new() {
-            ["cmd"] = commandJson
+        var commandResultQuery = BuildQuery(commandQuery, new() {
+            ["cmd"] = queryCommand
         });
-        return resultQuery;
+        parameters["Command"] = command;
+        return new RadselCommand(commandResultQuery, parameters.ToString(Formatting.None));
     }
     /// <summary>
     ///     Build query with specified query arguments
@@ -577,6 +595,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         var i = 0;
         foreach (var eventJson in array) {
             result[i] = ReadEvent(eventJson);
+            i++;
         }
         return result;
     }
@@ -684,7 +703,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <param name="json">Json</param>
     public static RadselEventInputPassive ReadEventInputPassive(RadselEventId eventId, JToken json) {
         var pin = json.SelectIntOrThrow("$.Number");
-        var partitionsList = json.SelectList<int>("$.Partitions");
+        var partitionsList = json.SelectList<int>("$.Partitions[::]");
         int[]? partitions = partitionsList == null ? null : [.. partitionsList];
         return new RadselEventInputPassive(eventId, pin, partitions);
     }
@@ -695,7 +714,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <param name="json">Json</param>
     public static RadselEventInputActive ReadEventInputActive(RadselEventId eventId, JToken json) {
         var pin = json.SelectIntOrThrow("$.Number");
-        var partitionsList = json.SelectList<int>("$.Partitions");
+        var partitionsList = json.SelectList<int>("$.Partitions[::]");
         int[]? partitions = partitionsList == null ? null : [.. partitionsList];
         return new RadselEventInputActive(eventId, pin, partitions);
     }
