@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NewtonsoftJsonHelper;
@@ -17,7 +19,8 @@ namespace Radsel.Core.Process;
 /// </summary>
 /// <param name="ccuApi">CCU API url</param>
 /// <param name="credentials">Credentials to CCU api</param>
-public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposable {
+/// <param name="logger">Logger</param>
+public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger logger) : IDisposable {
     private readonly HttpClient _httpClient = new() {
         DefaultRequestHeaders =  {
             Authorization = new AuthenticationHeaderValue("Basic", credentials.Token)
@@ -31,7 +34,13 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     ///     Constructor of client with using "https://ccu.su" as source by default
     /// </summary>
     /// <param name="credentials">Credentials to CCU api</param>
-    public RadselClient(RadselCredentials credentials) : this(RadselCCURelayUri, credentials) { }
+    public RadselClient(RadselCredentials credentials, ILogger logger) : this(RadselCCURelayUri, credentials, logger) {}
+    
+    /// <summary>
+    ///     Constructor of client with using "https://ccu.su" as source by default
+    /// </summary>
+    /// <param name="credentials">Credentials to CCU api</param>
+    public RadselClient(RadselCredentials credentials) : this(RadselCCURelayUri, credentials, NullLogger.Instance) {}
     /// <summary>
     ///     Команда к Radsel
     /// </summary>
@@ -67,7 +76,6 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     public async Task<RadselState> GetStateAndEventsAsync(CancellationToken cancellationToken) {
         var query = BuildCommandQuery("GetStateAndEvents");
         var responseJson = await ExecuteJsonAsync(query, cancellationToken);
-        await Console.Out.WriteLineAsync(responseJson.ToString(Formatting.Indented));
         var result = ReadState(responseJson);
         return result;
     }
@@ -151,7 +159,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <returns>Async task to listenning radsel events</returns>
     public async IAsyncEnumerable<RadselSSEventType> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken) {
         var channel = Channel.CreateUnbounded<RadselSSEventType>();
-        var subscriber = new RadselEventSubscriber(channel);
+        var subscriber = new RadselEventSubscriber(channel, logger);
         using var source = new EventSource(SSEConnect, subscriber);
         while (cancellationToken.IsCancellationRequested == false) {
             var radselEventEnumerable = channel.Reader.ReadAllAsync(cancellationToken);
@@ -229,15 +237,10 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <summary>
     ///     Radsel event subscriber
     /// </summary>
-    private class RadselEventSubscriber : IServerSentEventsSubscriber {
-        private readonly Channel<RadselSSEventType> _channel;
-        /// <summary>
-        ///     Constructor of subscriber
-        /// </summary>
-        /// <param name="channel">Channel to streaming messages</param>
-        public RadselEventSubscriber(Channel<RadselSSEventType> channel) {
-            _channel = channel;
-        }
+    /// <param name="channel">Channel to streaming messages</param>
+    /// <param name="logger">Logger</param>
+    private class RadselEventSubscriber(Channel<RadselSSEventType> channel, ILogger logger) : IServerSentEventsSubscriber {
+        private readonly Channel<RadselSSEventType> _channel = channel;
         /// <summary>
         ///     Process open connection event in async manner
         /// </summary>
@@ -250,7 +253,6 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         /// <param name="serverEvent">Event</param>
         /// <returns>Async task to message processing</returns>
         public async Task OnMessage(ServerSentEvent serverEvent) {
-            await Console.Out.WriteLineAsync($"{serverEvent.EventType}:{serverEvent.Data}");
             if (serverEvent.EventType == "message") {
                 var radselEvent = ReadSSEvent(serverEvent.Data);
                 await _channel.Writer.WriteAsync(radselEvent);
@@ -263,8 +265,9 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
         /// </summary>
         /// <param name="exception">Exception</param>
         /// <returns>Async task to exception processing</returns>
-        public async Task OnError(Exception exception) {
-            await Console.Out.WriteLineAsync($"ERROR: {exception.ToString()}");
+        public Task OnError(Exception exception) {
+            logger.LogError(exception, "Exception during SSE session");
+            return Task.CompletedTask;
         }
     }
     /// <summary>
@@ -703,7 +706,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <param name="json">Json</param>
     public static RadselEventInputPassive ReadEventInputPassive(RadselEventId eventId, JToken json) {
         var pin = json.SelectIntOrThrow("$.Number");
-        var partitionsList = json.SelectList<int>("$.Partitions[::]");
+        var partitionsList = json.SelectList<int>("$.Partitions");
         int[]? partitions = partitionsList == null ? null : [.. partitionsList];
         return new RadselEventInputPassive(eventId, pin, partitions);
     }
@@ -714,7 +717,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials) : IDisposab
     /// <param name="json">Json</param>
     public static RadselEventInputActive ReadEventInputActive(RadselEventId eventId, JToken json) {
         var pin = json.SelectIntOrThrow("$.Number");
-        var partitionsList = json.SelectList<int>("$.Partitions[::]");
+        var partitionsList = json.SelectList<int>("$.Partitions");
         int[]? partitions = partitionsList == null ? null : [.. partitionsList];
         return new RadselEventInputActive(eventId, pin, partitions);
     }

@@ -4,11 +4,26 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <PackageId>Viklover.Radsel</PackageId>
+    <Version>0.0.1</Version>
+    <Authors>Mihail Vorobyev</Authors>
+    <Description>Radsel CCU API .NET Client</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/viklover/Radsel</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/viklover/Radsel</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="JsonHelper.Net" Version="1.1.3" />
     <PackageReference Include="Projektanker.ServerSentEvents.Client" Version="0.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+      <None Include="..\README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>
