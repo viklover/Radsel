@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
 
     <PackageId>Viklover.Radsel</PackageId>
-    <Version>0.0.1</Version>
+    <Version>1.0.0</Version>
     <Authors>Mihail Vorobyev</Authors>
     <Description>Radsel CCU API .NET Client</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

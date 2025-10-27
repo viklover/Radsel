@@ -1,6 +1,19 @@
 # Radsel CCU API .NET Client
 Simple client implementation of [CCU API interface](https://radsel.ru/files/docs/ccu-api/ccu-api.html).
 
+## 📚 Features
+- Complete protocol implementation
+- Event-driven SSE communication
+- Fully asynchronous API
+- Strongly typed models
+
+
+## 🚀 Quick start
+Installation:
+```bash
+dotnet add package Viklover.Radsel --version 1.0.0
+```
+Example usage:
 ```csharp
 var credentials = new RadselCredentials("username", "password", "IMEI device");
 var client = new RadselClient(credentials);
@@ -17,3 +30,9 @@ await foreach (var message in client.ListenAsync(CancellationToken.None)) {
     }
 }
 ```
+
+# 🛠️ Contribution
+Contributions are welcome! Feel free to:
+* Report bugs 🐛
+* Suggest features 💡
+* Submit pull requests 🔄
