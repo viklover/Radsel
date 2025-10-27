@@ -35,7 +35,7 @@ await foreach (var message in client.ListenAsync(CancellationToken.None)) {
 }
 ```
 
-# 🛠️ Contribution
+## 🛠️ Contribution
 Contributions are welcome! Feel free to:
 * Report bugs 🐛
 * Suggest features 💡
