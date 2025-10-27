@@ -172,6 +172,24 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger log
         return result;
     }
     /// <summary>
+    ///     Apply profile in async manner
+    /// </summary>
+    /// <param name="profileNum">Profile number</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to profile applying</returns>
+    public async Task<RadselState> ApplyProfileAsync(int profileNum, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("ApplyProfile", new JObject {
+            ["Number"] = profileNum
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var result = ReadState(responseJson);
+        return result;
+    }
+    /// <summary>
     ///     Get device info in async manner
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
