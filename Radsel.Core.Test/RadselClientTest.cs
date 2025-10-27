@@ -2,6 +2,7 @@
 using Radsel.Core.Model;
 using Radsel.Core.Model.Battery;
 using Radsel.Core.Model.Event;
+using Radsel.Core.Model.Gate;
 using Radsel.Core.Process;
 using static Radsel.Core.Process.RadselClient;
 
@@ -206,5 +207,72 @@ public class RadselClientTest : RadselTest {
     public void ReadOutputTest(int input, bool expectedState) {
         var result = ReadOutput(input);
         Assert.That(result.IsActive, Is.EqualTo(expectedState));
+    }
+    [TestCase("CCU825", "HOME+", "E01.1", 16, 4, "10.02", "02.02", "01.02", "Aug 31 2015", "RUS", "1414FD09535605154EF8C306F5043213", "869158123877455", 17, "{\"DeviceType\":\"CCU825\",\"DeviceMod\":\"HOME+\",\"ExtBoard\":\"E01.1\",\"InputsCount\":16,\"PartitionsCount\":4,\"HwVer\":\"10.02\",\"FwVer\":\"02.02\",\"BootVer\":\"01.02\",\"FwBuildDate\":\"Aug 31 2015\",\"CountryCode\":\"RUS\",\"Serial\":\"1414FD09535605154EF8C306F5043213\",\"IMEI\":\"869158123877455\",\"uGuardVerCode\":17}")]
+    public void ReadDeviceInfoTest(string dT, string dM, string eB, int iC, int pC, string hV, string fV, string bV, string fbD, string cc, string serial, string imei, int uGuardVerCode, string input) {
+        var inputJson = JToken.Parse(input);
+        var result = ReadDeviceInfo(inputJson);
+        Assert.That(result.DeviceType, Is.EqualTo(dT));
+        Assert.That(result.DeviceMod, Is.EqualTo(dM));
+        Assert.That(result.ExtBoard, Is.EqualTo(eB));
+        Assert.That(result.InputsCount, Is.EqualTo(iC));
+        Assert.That(result.PartitionsCount, Is.EqualTo(pC));
+        Assert.That(result.HwVer, Is.EqualTo(hV));
+        Assert.That(result.FwVer, Is.EqualTo(fV));
+        Assert.That(result.BootVer, Is.EqualTo(bV));
+        Assert.That(result.FwBuildDate, Is.EqualTo(fbD));
+        Assert.That(result.CountryCode, Is.EqualTo(cc));
+        Assert.That(result.Serial, Is.EqualTo(serial));
+        Assert.That(result.IMEI, Is.EqualTo(imei));
+        Assert.That(result.uGuardVerCode, Is.EqualTo(uGuardVerCode));
+    }
+    [TestCase("[\"+79109451234\",\"Петров\",\"S8\",\"\",\"\",\"\",\"OFF\",\"ON\",\"\"]", "+79109451234", "Петров", "S8", null, null, null, "OFF", "ON", null)]
+    public void ReadGateUserConfigTest(string input, string phone, string username, params string?[] actions) {
+        var inputJson = JArray.Parse(input);
+        var result = ReadGateUserConfig(inputJson);
+        Assert.That(result.Phone, Is.EqualTo(phone));
+        Assert.That(result.Username, Is.EqualTo(username));
+        Assert.That(result.OutputActions, Has.Length.EqualTo(actions.Length));
+        for (var i = 0; i < actions.Length; ++i) {
+            RadselGateOutputAction? expectedAction;
+            if (actions[i] == "ON") {
+                expectedAction = new RadselGateOutputActionPower(true);
+            } else if (actions[i] == "OFF") {
+                expectedAction = new RadselGateOutputActionPower(false);
+            } else if (actions[i] == null) {
+                expectedAction = null;
+            } else if (actions[i]!.StartsWith("S") == true) {
+                expectedAction = new RadselGateOutputActionScenario(actions[i]!);
+            } else {
+                throw new ArgumentException("Invalid input arguments");
+            }
+            Assert.That(result.OutputActions[i], Is.EqualTo(expectedAction));
+        }
+    }
+    [Test]
+    [Repeat(3)]
+    public void SerialieGateUserConfigTest() {
+        var config = GenerateUserConfig();
+        var configSerialized = Serialize(config);
+        var readConfig = ReadGateUserConfig(configSerialized);
+        Assert.That(readConfig.Phone, Is.EqualTo(config.Phone));
+        Assert.That(readConfig.Username, Is.EqualTo(config.Username));
+        Assert.That(readConfig.OutputActions, Is.EqualTo(config.OutputActions).AsCollection);
+    }
+    [TestCase("[1,\"2021-06-04T21:07:46\",\"+79109451234\"]", 1, "2021-06-04T21:07:46", "+79109451234")]
+    public void ReadGateRecordTest(string input, int index, string dateTimeStr, string phone) {
+        var inputJson = JArray.Parse(input);
+        var result = ReadGateRecord(inputJson);
+        var expectedDateTime = DateTime.Parse(dateTimeStr);
+        Assert.That(result.Index, Is.EqualTo(index));
+        Assert.That(result.DateTime, Is.EqualTo(expectedDateTime));
+        Assert.That(result.Phone, Is.EqualTo(phone));
+    }
+    [TestCase("{\"Records\":[[1,\"2021-06-04T21:07:46\",\"+79109451234\"],[2,\"2021-06-04T21:08:00\",\"+79109454321\"]],\"Last\":true}", 2, true)]
+    public void ReadGateRecordScrollTest(string input, int numberOfRecords, bool? last) {
+        var inputJson = JToken.Parse(input);
+        var result = ReadGateRecordScroll(inputJson);
+        Assert.That(result.Records, Has.Length.EqualTo(numberOfRecords));
+        Assert.That(result.Last, Is.EqualTo(last));
     }
 }

@@ -12,6 +12,7 @@ using Projektanker.ServerSentEvents.Client;
 using Radsel.Core.Model;
 using Radsel.Core.Model.Battery;
 using Radsel.Core.Model.Event;
+using Radsel.Core.Model.Gate;
 
 namespace Radsel.Core.Process;
 /// <summary>
@@ -120,7 +121,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger log
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Async task to setup partition state</returns>
     public async Task<RadselState> SetPartitionsStateAsync(RadselPartitionState?[] stateArray, CancellationToken cancellationToken) {
-        var query = BuildCommandQuery("SetPartitionState", new JObject {
+        var query = BuildCommandQuery("SetPartitionsState", new JObject {
             ["State"] = new JArray(stateArray.Select(state => state == null ? string.Empty : Serialize(state.Value)))
         });
         var responseJson = await ExecuteJsonAsync(query, cancellationToken);
@@ -138,7 +139,7 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger log
     /// <param name="output">Output number</param>
     /// <param name="state">Expected state</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Async task to setup partition state</returns>
+    /// <returns>Async task to set output state</returns>
     public async Task<RadselState> SetOutputStateAsync(int output, bool state, CancellationToken cancellationToken) {
         var query = BuildCommandQuery("SetOutputState", new JObject {
             ["Number"] = output,
@@ -150,6 +151,209 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger log
             throw new RadselClientResponseException(response);
         }
         var result = ReadState(responseJson);
+        return result;
+    }
+    /// <summary>
+    ///     Set outputs state in async manner
+    /// </summary>
+    /// <param name="states">Array of states for all outputs (null = no impact)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to set outputs state</returns>
+    public async Task<RadselState> SetOutputsStateAsync(bool?[] states, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("SetOutputsState", new JObject {
+            ["State"] = new JArray(states.Select(i => i == null ? -1 : (i.Value ? 1 : 0)))
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var result = ReadState(responseJson);
+        return result;
+    }
+    /// <summary>
+    ///     Get device info in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get device info</returns>
+    public async Task<RadselDeviceInfo> GetDeviceInfoAsync(CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetDeviceInfo");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var result = ReadDeviceInfo(responseJson);
+        return result;
+    }
+    /// <summary>
+    ///     Get all gate users in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get all gate users configurations</returns>
+    public async Task<RadselGateUserConfig[]> GetAllGateUsersAsync(CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetAllGateUsers");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var usersTokens = responseJson.SelectTokens("$.Users[::]");
+        var result = usersTokens.Select(t => ReadGateUserConfig((JArray) t));
+        return [..result];
+    }
+    /// <summary>
+    ///     Set all gate users in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to set all gate users configuration</returns>
+    public async Task<RadselGateUserConfig[]> SetAllGateUsersAsync(RadselGateUserConfig[] users, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("SetAllGateUsers", new JObject {
+            ["Users"] = new JArray(users.Select(Serialize))
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var usersTokens = responseJson.SelectTokens("$.Users[::]");
+        var result = usersTokens.Select(t => ReadGateUserConfig((JArray) t));
+        return [..result];
+    }
+    /// <summary>
+    ///     Delete all gate users in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to delete all gate users configurations</returns>
+    public async Task<RadselGateUserConfig[]> DelAllGateUsersAsync(RadselGateUserConfig[] users, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("DelAllGateUsers");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var usersTokens = responseJson.SelectTokens("$.Users[::]");
+        var result = usersTokens.Select(t => ReadGateUserConfig((JArray) t));
+        return [..result];
+    }
+    /// <summary>
+    ///     Get gate user configuration by phone in async manner
+    /// </summary>
+    /// <param name="phone">Phone</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get user configuration</returns>
+    public async Task<RadselGateUserConfig?> GetGateUserAsync(string phone, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetGateUser", new JObject {
+            ["Phone"] = phone
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var userToken = responseJson.Select("$.User", JTokenType.Array);
+        if (userToken == null) {
+            return null;
+        }
+        var array = (JArray) userToken;
+        var result = ReadGateUserConfig(array);
+        return result;
+    }
+    /// <summary>
+    ///     Set gate user configuration in async manner
+    /// </summary>
+    /// <param name="config">User configuration</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to set user configuration</returns>
+    public async Task<RadselGateUserConfig> SetGateUserAsync(RadselGateUserConfig config, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("SetGateUser", new JObject {
+            ["User"] = Serialize(config)
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var userToken = (JArray) responseJson.SelectOrThrow("$.User", JTokenType.Array);
+        var result = ReadGateUserConfig(userToken);
+        return result;
+    }
+    /// <summary>
+    ///     Delete gate user configuration by phone in async manner
+    /// </summary>
+    /// <param name="phone">Phone</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to delete user configuration</returns>
+    public async Task<RadselGateUserConfig?> DelGateUserAsync(string phone, CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("DelGateUser", new JObject {
+            ["Phone"] = phone
+        });
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var userToken = responseJson.Select("$.User", JTokenType.Array);
+        if (userToken == null) {
+            return null;
+        }
+        var array = (JArray) userToken;
+        var result = ReadGateUserConfig(array);
+        return result;
+    }
+    /// <summary>
+    ///     Get first gate record in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get first gate record</returns>
+    public async Task<RadselGateRecord?> GetFirstGateRecordAsync(CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetFirstGateRecord");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var recordToken = responseJson.Select("$.Record", JTokenType.Array);
+        if (recordToken == null) {
+            return null;
+        }
+        var recordArrayToken = (JArray)recordToken;
+        var result = ReadGateRecord(recordArrayToken);
+        return result;
+    }
+    /// <summary>
+    ///     Get last gate record in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get last gate record</returns>
+    public async Task<RadselGateRecord?> GetLastGateRecordAsync(CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetLastGateRecord");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var recordToken = responseJson.Select("$.Record", JTokenType.Array);
+        if (recordToken == null) {
+            return null;
+        }
+        var recordArrayToken = (JArray)recordToken;
+        var result = ReadGateRecord(recordArrayToken);
+        return result;
+    }
+    /// <summary>
+    ///     Get next gate records in async manner
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Async task to get next gate records</returns>
+    public async Task<RadselGateRecordScroll> GetNextGateRecordsAsync(CancellationToken cancellationToken) {
+        var query = BuildCommandQuery("GetNextGateRecords");
+        var responseJson = await ExecuteJsonAsync(query, cancellationToken);
+        var response = ReadResponseStatus(responseJson);
+        if (response != null) {
+            throw new RadselClientResponseException(response);
+        }
+        var result = ReadGateRecordScroll(responseJson);
         return result;
     }
     /// <summary>
@@ -916,5 +1120,130 @@ public class RadselClient(Uri ccuApi, RadselCredentials credentials, ILogger log
             return "Protect";
         }
         throw new RadselException($"Unexpected partition state: {state}");
+    }
+    /// <summary>
+    ///     Read <see cref="RadselDeviceInfo"/> from json
+    /// </summary>
+    /// <param name="json">Json</param>
+    /// <returns><see cref="RadselDeviceInfo"/></returns>
+    public static RadselDeviceInfo ReadDeviceInfo(JToken json) {
+        var deviceType = json.SelectStringOrThrow("$.DeviceType");
+        var deviceMod = json.SelectStringOrThrow("$.DeviceMod");
+        var extBoard = json.SelectStringOrThrow("$.ExtBoard");
+        var inputsCount = json.SelectIntOrThrow("$.InputsCount");
+        var partitionsCount = json.SelectIntOrThrow("$.PartitionsCount");
+        var hwVer = json.SelectStringOrThrow("$.HwVer");
+        var fwVer = json.SelectStringOrThrow("$.FwVer");
+        var bootVer = json.SelectStringOrThrow("$.BootVer");
+        var fwBuildDate = json.SelectStringOrThrow("$.FwBuildDate");
+        var countryCode = json.SelectStringOrThrow("$.CountryCode");
+        var serial = json.SelectStringOrThrow("$.Serial");
+        var imei = json.SelectStringOrThrow("$.IMEI");
+        var uGuardVerCode = json.SelectIntOrThrow("$.uGuardVerCode");
+        return new RadselDeviceInfo(
+            deviceType,
+            deviceMod,
+            extBoard,
+            inputsCount,
+            partitionsCount,
+            hwVer,
+            fwVer,
+            bootVer,
+            fwBuildDate,
+            countryCode,
+            serial,
+            imei,
+            uGuardVerCode
+        );
+    }
+    /// <summary>
+    ///     Read <see cref="RadselGateUserConfig"/> from json array
+    /// </summary>
+    /// <param name="array">Json array</param>
+    /// <returns><see cref="RadselGateUserConfig"/></returns>
+    public static RadselGateUserConfig ReadGateUserConfig(JArray array) {
+        var phone = array.SelectStringOrThrow("$.[0]");
+        var username = array.SelectStringOrThrow("$.[1]");
+        var actionArray = new RadselGateOutputAction?[array.Count - 2];
+        for (var i = 2; i < array.Count; ++i) {
+            var actionStr = array.SelectStringOrThrow($"$.[{i}]");
+            var action = ReadGateOutputAction(actionStr);
+            actionArray[i - 2] = action;
+        }
+        return new(phone, username, actionArray);
+    }
+    /// <summary>
+    ///     Read <see cref="RadselGateOutputAction"/> from <see cref="string"/>
+    /// </summary>
+    /// <param name="str">String</param>
+    /// <returns><see cref="RadselGateOutputAction"/></returns>
+    public static RadselGateOutputAction? ReadGateOutputAction(string str) {
+        if (str == "ON") {
+            return new RadselGateOutputActionPower(true);
+        }
+        if (str == "OFF") {
+            return new RadselGateOutputActionPower(false);
+        }
+        if (str == "") {
+            return null;
+        }
+        if (str.StartsWith("S")) {
+            return new RadselGateOutputActionScenario(str);
+        }
+        throw new RadselException($"Failed to read gate output action: {str}");
+    }
+    /// <summary>
+    ///     Serialize <see cref="RadselGateUserConfig"/> to json array
+    /// </summary>
+    /// <param name="config">Config</param>
+    /// <returns>Json array</returns>
+    public static JArray Serialize(RadselGateUserConfig config) {
+        var array = new JArray(config.Phone, config.Username) {
+            config.OutputActions.Select(Serialize)
+        };
+        return array;
+    }
+    /// <summary>
+    ///     Serialize <see cref="RadselGateOutputAction"/> to <see cref="string"/>
+    /// </summary>
+    /// <param name="action">Action</param>
+    /// <returns><see cref="string"/></returns>
+    public static string Serialize(RadselGateOutputAction? action) {
+        if (action is null) {
+            return string.Empty;
+        }
+        if (action is RadselGateOutputActionPower power) {
+            if (power.Type == RadselGateOutputActionType.On) {
+                return "ON";
+            }
+            if (power.Type == RadselGateOutputActionType.Off) {
+                return "OFF";
+            }
+        }
+        if (action is RadselGateOutputActionScenario scenario) {
+            return scenario.Name;
+        }
+        throw new RadselException($"Failed to serialize: {action}");
+    }
+    /// <summary>
+    ///     Read <see cref="RadselGateRecordScroll"/> from json
+    /// </summary>
+    /// <param name="json">Json</param>
+    /// <returns><see cref="RadselGateRecordScroll"/></returns>
+    public static RadselGateRecordScroll ReadGateRecordScroll(JToken json) {
+        var records = json.SelectTokens("$.Records[::]").Select(t => ReadGateRecord((JArray)t)).ToArray();
+        var last = json.SelectBoolean("$.Last");
+        return new(records, last);
+    }
+    /// <summary>
+    ///     Read <see cref="RadselGateRecord"/> from json array
+    /// </summary>
+    /// <param name="array">Json array</param>
+    /// <returns><see cref="RadselGateRecord"/></returns>
+    public static RadselGateRecord ReadGateRecord(JArray array) {
+        var index = array.SelectIntOrThrow("$.[0]");
+        var dateTime = array.SelectDateOrThrow("$.[1]");
+        var phone = array.SelectStringOrThrow("$.[2]");
+        return new(index, dateTime, phone);
     }
 }
