@@ -1,4 +1,8 @@
 # Radsel CCU API .NET Client
+[![Nuget](https://badge.fury.io/nu/Viklover.Radsel.svg)](https://badge.fury.io/nu/Viklover.Radsel)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/viklover/Radsel/blob/master/LICENSE.txt)
+![Unit tests workflow](https://github.com/viklover/Radsel/actions/workflows/unit-tests.yml/badge.svg)
+
 Simple client implementation of [CCU API interface](https://radsel.ru/files/docs/ccu-api/ccu-api.html).
 
 ## 📚 Features
