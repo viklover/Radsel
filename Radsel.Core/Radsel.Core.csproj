@@ -19,7 +19,7 @@
   <ItemGroup>
     <PackageReference Include="JsonHelper.Net" Version="1.1.3" />
     <PackageReference Include="Projektanker.ServerSentEvents.Client" Version="0.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
   </ItemGroup>
 
   <ItemGroup>
