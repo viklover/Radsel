@@ -1,0 +1,22 @@
+name: NuGet publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+
+    steps:
+      - uses: viklover/nuget-publish@v1
+        with:
+          DOTNET_VERSION: "8.0.x"
+          PROJECT_FILE_PATH: Radsel/Radsel.csproj
+          NUGET_USER: viklover
